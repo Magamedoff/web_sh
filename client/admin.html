@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель администратора - МУИВ</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="top-banner">
+        <div class="banner-container">
+            <div class="logo-wrapper">
+                <img src="img/logo.png" alt="МУИВ Логотип" class="logo">
+                <span style="margin-left: 15px; font-weight: bold; color: #34495e;">Панель администратора</span>
+            </div>
+            <div class="banner-actions">
+                <button id="logoutBtn" class="btn-primary">Выход</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="tabs-container">
+            <button class="tab-btn active" data-target="admin-register">Регистрация</button>
+            <button class="tab-btn" data-target="admin-view">Просмотр</button>
+            <button class="tab-btn" data-target="admin-backup">Резервное копирование</button>
+        </div>
+
+        <div id="admin-register" class="tab-content active">
+            <h2>Регистрация новых пользователей в системе</h2>
+            
+            <div class="modal-content" style="max-width: 500px; margin: 0; box-shadow: none; border: 1px solid #ccc;">
+                <form id="adminRegForm">
+                    <div class="form-group">
+                        <label for="regRole">Роль пользователя:</label>
+                        <select id="regRole" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;" required>
+                            <option value="1">Администратор</option>
+                            <option value="2">Преподаватель</option>
+                            <option value="3" selected>Студент</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="teacherSelectGroup" style="display: none;">
+                        <label for="teacherId">Выберите преподавателя:</label>
+                        <select id="teacherId" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                            <option value="">-- Загрузка... --</option>
+                        </select>
+                    </div>
+
+                    <div id="studentSelectGroup">
+                        <div class="form-group">
+                            <label for="groupId">Выберите группу:</label>
+                            <select id="groupId" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                                <option value="">-- Выберите группу --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="studentId">Выберите студента:</label>
+                            <select id="studentId" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                                <option value="">-- Сначала выберите группу --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="regLogin">Логин:</label>
+                        <input type="text" id="regLogin" placeholder="Введите логин" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Пароль:</label>
+                        <input type="password" id="regPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="regPasswordConfirm">Повторите пароль:</label>
+                        <input type="password" id="regPasswordConfirm" required>
+                    </div>
+                    <button type="submit" class="btn-primary form-btn">Создать учетную запись</button>
+                </form>
+                <div id="regMessage" style="margin-top: 15px; text-align: center; font-weight: bold;"></div>
+            </div>
+        </div>
+
+        <div id="admin-view" class="tab-content hidden">
+            <h2>Зарегистрированные пользователи</h2>
+            <div style="margin-bottom: 20px;">
+                <label for="filterRole" style="font-weight: bold;">Фильтр по роли:</label>
+                <select id="filterRole" style="padding: 8px; margin-left: 10px; border-radius: 4px; border: 1px solid #ccc; width: 200px;">
+                    <option value="">-- Все роли --</option>
+                    <option value="1">Администраторы</option>
+                    <option value="2">Преподаватели</option>
+                    <option value="3">Студенты</option>
+                </select>
+            </div>
+
+            <table id="usersTable">
+                <thead>
+                    <tr>
+                        <th>Логин</th>
+                        <th>Роль</th>
+                        <th>ФИО</th>
+                        <th style="text-align: center;">Удаление</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="4" style="text-align:center;">Загрузка списка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="admin-backup" class="tab-content hidden">
+            <h2>Резервное копирование базы данных</h2>
+            <div class="modal-content" style="max-width: 500px; margin: 0; box-shadow: none; border: 1px solid #ccc;">
+                <p style="font-size: 14px; color: #555; line-height: 1.5; margin-bottom: 20px;">
+                    Создание дампа базы данных. <br> 
+                </p>
+                <div class="form-group">
+                    <label for="backupDate">Дата для имени файла:</label>
+                    <input type="date" id="backupDate" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                </div>
+                <button id="doBackupBtn" class="btn-primary form-btn">Сделать резервную копию</button>
+                <div id="backupMessage" style="margin-top: 15px; text-align: center; font-weight: bold;"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer style="background-color: #34495e; color: #fff; text-align: center; padding: 15px 0; margin-top: 40px;">
+        <div class="banner-container">
+            <p style="margin: 0; font-size: 14px;">Разработано: Евсютин Виталий Юрьевич</p>
+        </div>
+    </footer>
+
+    <script src="js/admin.js"></script>
+</body>
+</html>

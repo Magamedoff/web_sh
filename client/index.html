@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Расписание занятий и сессии - МУИВ</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="top-banner">
+        <div class="banner-container">
+            <div class="logo-wrapper">
+                <img src="img/logo.png" alt="МУИВ Логотип" class="logo">
+            </div>
+            <div class="banner-actions" id="headerActions">
+                <a href="login.html" class="btn-primary" style="text-decoration: none;">Войти в систему</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="tabs-container">
+            <button class="tab-btn active" data-target="classes">Расписание занятий</button>
+            <button class="tab-btn" data-target="session">Расписание сессии</button>
+            <!-- Вкладка студента генерируется динамически в app.js -->
+        </div>
+
+        <div id="classes" class="tab-content active">
+            <h1>Расписание на текущую неделю</h1>
+            <table id="scheduleTable">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Время</th>
+                        <th>Группа</th>
+                        <th>Дисциплина</th>
+                        <th>Преподаватель</th>
+                        <th>Аудитория</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="session" class="tab-content hidden">
+            <h1>Расписание сессии</h1>
+            <table id="sessionTable">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Время</th>
+                        <th>Группа</th>
+                        <th>Дисциплина</th>
+                        <th>Преподаватель</th>
+                        <th>Аудитория</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <footer style="background-color: #34495e; color: #fff; text-align: center; padding: 15px 0; margin-top: 40px;">
+        <div class="banner-container">
+            <p style="margin: 0; font-size: 14px;">Разработано: Евсютин Виталий Юрьевич</p>
+        </div>
+    </footer>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

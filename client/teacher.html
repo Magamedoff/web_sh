@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель преподавателя - МУИВ</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="top-banner">
+        <div class="banner-container">
+            <div class="logo-wrapper">
+                <img src="img/logo.png" alt="МУИВ Логотип" class="logo">
+                <span style="margin-left: 15px; font-weight: bold; color: #34495e;">Личный кабинет преподавателя</span>
+            </div>
+            <div class="banner-actions">
+                <button id="logoutBtn" class="btn-primary">Выход</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="tabs-container">
+            <button class="tab-btn active" data-target="my-classes">Мои занятия</button>
+            <button class="tab-btn" data-target="my-session">Мои экзамены</button>
+            <button class="tab-btn" data-target="my-archive">Архив ведомостей</button>
+        </div>
+
+        <!-- Мое расписание занятий -->
+        <div id="my-classes" class="tab-content active">
+            <h2>Мое расписание на неделю</h2>
+            <table id="teacherScheduleTable">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Время</th>
+                        <th>Группа</th>
+                        <th>Дисциплина</th>
+                        <th>Аудитория</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Моя сессия -->
+        <div id="my-session" class="tab-content hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Расписание принимаемых экзаменов</h2>
+                <button id="addExamBtn" class="btn-primary" style="background-color: #27ae60;">+ Назначить экзамен</button>
+            </div>
+            <p style="font-size: 14px; color: #555;">(Кликните по строке с экзаменом, чтобы выставить оценки)</p>
+            <table id="teacherSessionTable">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Время</th>
+                        <th>Группа</th>
+                        <th>Дисциплина</th>
+                        <th>Аудитория</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Архив ведомостей -->
+        <div id="my-archive" class="tab-content hidden">
+            <h2>Просмотр сданных ведомостей</h2>
+            
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; align-items: flex-end;">
+                <div class="form-group" style="margin: 0; min-width: 200px;">
+                    <label>Фильтр по группе:</label>
+                    <select id="archiveGroup" style="width: 100%; padding: 10px;"></select>
+                </div>
+                <div class="form-group" style="margin: 0; min-width: 250px;">
+                    <label>Фильтр по предмету:</label>
+                    <select id="archiveSubject" style="width: 100%; padding: 10px;"></select>
+                </div>
+                <button id="btnLoadArchive" class="btn-primary">Показать</button>
+                <button id="btnPrintArchive" class="btn-primary" style="background-color: #c41230;">Печать</button>
+            </div>
+            
+            <!-- Для печати -->
+            <div id="printArea">
+                <table id="archiveTable">
+                    <thead>
+                        <tr>
+                            <th>Дата сдачи</th>
+                            <th>Группа</th>
+                            <th>Дисциплина</th>
+                            <th>ФИО Студента</th>
+                            <th>Оценка</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Модальное окно: Добавление экзамена -->
+    <div id="examModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" id="closeExamModal"></span>
+            <h2>Назначить экзамен</h2>
+            <form id="addExamForm">
+                <div class="form-group">
+                    <label>Группа:</label>
+                    <select id="examGroup" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Дисциплина:</label>
+                    <select id="examSubject" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Дата:</label>
+                    <input type="date" id="examDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Время:</label>
+                    <input type="time" id="examTime" required>
+                </div>
+                <div class="form-group">
+                    <label>Аудитория:</label>
+                    <input type="text" id="examRoom" placeholder="Ауд. 101" required>
+                </div>
+                <button type="submit" class="btn-primary form-btn">Сохранить</button>
+                <div id="examMsg" style="margin-top:10px; text-align:center; font-weight:bold;"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно: Ведомость/Оценки -->
+    <div id="gradeModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 650px;">
+            <span class="close-btn" id="closeGradeModal"></span>
+            <h2>Ведомость группы</h2>
+            <table id="gradeTable">
+                <thead>
+                    <tr>
+                        <th>ФИО Студента</th>
+                        <th>Оценка (2-5)</th>
+                        <th>Действие</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div style="text-align: right; margin-top: 15px;">
+                <button id="closeGradeModalBottomBtn" class="btn-primary" style="background-color: #95a5a6;">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <footer style="background-color: #34495e; color: #fff; text-align: center; padding: 15px 0; margin-top: 40px;">
+        <div class="banner-container">
+            <p style="margin: 0; font-size: 14px;">Разработано: Евсютин Виталий Юрьевич</p>
+        </div>
+    </footer>
+
+    <script src="js/teacher.js"></script>
+</body>
+</html>
