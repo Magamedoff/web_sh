@@ -22,13 +22,13 @@
     <main class="main-content">
         <div class="tabs-container">
             <button class="tab-btn active" data-target="admin-register">Регистрация</button>
-            <button class="tab-btn" data-target="admin-view">Просмотр</button>
+            <button class="tab-btn" data-target="admin-view">Просмотр пользователей</button>
+            <button class="tab-btn" data-target="admin-schedule" id="adminScheduleTabBtn">Управление расписанием</button>
             <button class="tab-btn" data-target="admin-backup">Резервное копирование</button>
         </div>
 
         <div id="admin-register" class="tab-content active">
             <h2>Регистрация новых пользователей в системе</h2>
-            
             <div class="modal-content" style="max-width: 500px; margin: 0; box-shadow: none; border: 1px solid #ccc;">
                 <form id="adminRegForm">
                     <div class="form-group">
@@ -91,7 +91,6 @@
                     <option value="3">Студенты</option>
                 </select>
             </div>
-
             <table id="usersTable">
                 <thead>
                     <tr>
@@ -103,6 +102,62 @@
                 </thead>
                 <tbody>
                     <tr><td colspan="4" style="text-align:center;">Загрузка списка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="admin-schedule" class="tab-content hidden">
+            <h2 id="schFormTitle">Добавить учебное занятие</h2>
+            <div class="modal-content" style="max-width: 100%; margin: 0 0 30px 0; box-shadow: none; border: 1px solid #ccc; padding: 20px;">
+                <form id="adminScheduleForm" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; align-items: end;">
+                    <input type="hidden" id="schId">
+                    <div class="form-group" style="margin: 0;">
+                        <label for="schGroup">Группа:</label>
+                        <select id="schGroup" required style="width: 100%; padding: 8px;"></select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="schSubject">Дисциплина:</label>
+                        <select id="schSubject" required style="width: 100%; padding: 8px;"></select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="schTeacher">Преподаватель:</label>
+                        <select id="schTeacher" required style="width: 100%; padding: 8px;"></select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="schDate">Дата:</label>
+                        <input type="date" id="schDate" required style="width: 100%; padding: 8px;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="schTime">Время:</label>
+                        <input type="time" id="schTime" required style="width: 100%; padding: 8px;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label for="schRoom">Аудитория:</label>
+                        <input type="text" id="schRoom" required style="width: 100%; padding: 8px;">
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="submit" class="btn-primary" id="schSubmitBtn" style="width: 100%;">Добавить</button>
+                        <button type="button" class="btn-primary" id="schCancelBtn" style="width: 100%; display: none; background-color: #95a5a6;">Отмена</button>
+                    </div>
+                </form>
+                <div id="schMsg" style="margin-top: 10px; font-weight: bold; text-align: center;"></div>
+            </div>
+
+            <h2>Список занятий</h2>
+            <table id="adminScheduleListTable">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Время</th>
+                        <th>Группа</th>
+                        <th>Дисциплина</th>
+                        <th>Преподаватель</th>
+                        <th>Аудитория</th>
+                        <th style="text-align: center;">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="7" style="text-align:center;">Загрузка расписания...</td></tr>
                 </tbody>
             </table>
         </div>

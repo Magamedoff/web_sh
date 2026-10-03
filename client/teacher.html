@@ -28,7 +28,10 @@
 
         <!-- Мое расписание занятий -->
         <div id="my-classes" class="tab-content active">
-            <h2>Мое расписание на неделю</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h2>Мое расписание на неделю</h2>
+                <button id="addClassBtn" class="btn-primary" style="background-color: #3498db;">+ Назначить занятие</button>
+            </div>
             <table id="teacherScheduleTable">
                 <thead>
                     <tr>
@@ -37,6 +40,7 @@
                         <th>Группа</th>
                         <th>Дисциплина</th>
                         <th>Аудитория</th>
+                        <th style="text-align: center;">Действия</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -67,7 +71,6 @@
         <!-- Архив ведомостей -->
         <div id="my-archive" class="tab-content hidden">
             <h2>Просмотр сданных ведомостей</h2>
-            
             <div style="display: flex; gap: 15px; margin-bottom: 20px; align-items: flex-end;">
                 <div class="form-group" style="margin: 0; min-width: 200px;">
                     <label>Фильтр по группе:</label>
@@ -80,8 +83,6 @@
                 <button id="btnLoadArchive" class="btn-primary">Показать</button>
                 <button id="btnPrintArchive" class="btn-primary" style="background-color: #c41230;">Печать</button>
             </div>
-            
-            <!-- Для печати -->
             <div id="printArea">
                 <table id="archiveTable">
                     <thead>
@@ -101,10 +102,43 @@
         </div>
     </main>
 
+    <!-- Модальное окно: Добавление/Редактирование занятия -->
+    <div id="classModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" id="closeClassModal">&times;</span>
+            <h2 id="classModalTitle">Назначить занятие</h2>
+            <form id="addClassForm">
+                <input type="hidden" id="classId">
+                <div class="form-group">
+                    <label>Группа:</label>
+                    <select id="classGroup" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Дисциплина:</label>
+                    <select id="classSubject" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Дата:</label>
+                    <input type="date" id="classDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Время:</label>
+                    <input type="time" id="classTime" required>
+                </div>
+                <div class="form-group">
+                    <label>Аудитория:</label>
+                    <input type="text" id="classRoom" placeholder="Ауд. 101" required>
+                </div>
+                <button type="submit" class="btn-primary form-btn" id="classSubmitBtn">Сохранить</button>
+                <div id="classMsg" style="margin-top:10px; text-align:center; font-weight:bold;"></div>
+            </form>
+        </div>
+    </div>
+
     <!-- Модальное окно: Добавление экзамена -->
     <div id="examModal" class="modal hidden">
         <div class="modal-content">
-            <span class="close-btn" id="closeExamModal"></span>
+            <span class="close-btn" id="closeExamModal">&times;</span>
             <h2>Назначить экзамен</h2>
             <form id="addExamForm">
                 <div class="form-group">
@@ -136,7 +170,7 @@
     <!-- Модальное окно: Ведомость/Оценки -->
     <div id="gradeModal" class="modal hidden">
         <div class="modal-content" style="max-width: 650px;">
-            <span class="close-btn" id="closeGradeModal"></span>
+            <span class="close-btn" id="closeGradeModal">&times;</span>
             <h2>Ведомость группы</h2>
             <table id="gradeTable">
                 <thead>

@@ -72,8 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function fetchSchedule() {
+    const role = localStorage.getItem('userRole');
+    const userId = localStorage.getItem('userId');
+    const query = (role && userId) ? `?role=${role}&userId=${userId}` : '';
+    
     try {
-        const response = await fetch('/api/schedule');
+        const response = await fetch(`/api/schedule${query}`);
         const data = await response.json();
         const tbody = document.querySelector('#scheduleTable tbody');
         tbody.innerHTML = ''; 
@@ -105,8 +109,12 @@ async function fetchSchedule() {
 }
 
 async function fetchSession() {
+    const role = localStorage.getItem('userRole');
+    const userId = localStorage.getItem('userId');
+    const query = (role && userId) ? `?role=${role}&userId=${userId}` : '';
+
     try {
-        const response = await fetch('/api/session');
+        const response = await fetch(`/api/session${query}`);
         const data = await response.json();
         const tbody = document.querySelector('#sessionTable tbody');
         tbody.innerHTML = ''; 

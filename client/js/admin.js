@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    // Проверка прав 
     const role = localStorage.getItem('userRole');
     if (role != 1) { 
         window.location.href = 'login.html';
@@ -11,14 +10,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = 'login.html';
     });
 
+    const formatName = (p) => `${p.last_name} ${p.first_name} ${p.middle_name || ''}`.trim();
+
     // --- ЛОГИКА ВКЛАДОК ---
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
 
     tabBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-            tabBtns.forEach(b => b.classList.remove('active'));
-            tabContents.forEach(c => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => {
                 c.classList.remove('active');
                 c.classList.add('hidden');
             });
@@ -26,125 +27,78 @@ document.addEventListener('DOMContentLoaded', async () => {
             const targetId = btn.getAttribute('data-target');
             document.getElementById(targetId).classList.remove('hidden');
             document.getElementById(targetId).classList.add('active');
+
+            if (targetId === 'admin-schedule') {
+                loadScheduleFormOptions();
+                fetchAdminSchedules();
+            }
         });
     });
 
+    // --- УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ---
     const regRole = document.getElementById('regRole');
     const teacherSelectGroup = document.getElementById('teacherSelectGroup');
     const studentSelectGroup = document.getElementById('studentSelectGroup');
-    
     const teacherIdSelect = document.getElementById('teacherId');
     const groupIdSelect = document.getElementById('groupId');
     const studentIdSelect = document.getElementById('studentId');
-    
-    const regForm = document.getElementById('adminRegForm');
-    const msgDiv = document.getElementById('regMessage');
-
     const filterRole = document.getElementById('filterRole');
     let allUsers = [];
 
-    // Функция форматирования ФИО
-    const formatName = (p) => `${p.last_name} ${p.first_name} ${p.middle_name || ''}`.trim();
-
-    // Загрузка списков преподавателей и групп при старте
     try {
-        const [teachersRes, groupsRes] = await Promise.all([
-            fetch('/api/admin/teachers'),
-            fetch('/api/admin/groups')
-        ]);
-        
+        const [teachersRes, groupsRes] = await Promise.all([fetch('/api/admin/teachers'), fetch('/api/admin/groups')]);
         const teachers = await teachersRes.json();
         const groups = await groupsRes.json();
 
         teacherIdSelect.innerHTML = '<option value="">-- Выберите преподавателя --</option>';
         teachers.forEach(t => {
-            const fullName = formatName(t);
-            const credentials = [];
-            if (t.short_dg_nm) credentials.push(t.short_dg_nm);
-            if (t.short_rn_nm) credentials.push(t.short_rn_nm);
-            const credString = credentials.length > 0 ? ` (${credentials.join(', ')})` : '';
-            teacherIdSelect.innerHTML += `<option value="${t.id}">${fullName}${credString}</option>`;
+            const creds = [];
+            if (t.short_dg_nm) creds.push(t.short_dg_nm);
+            if (t.short_rn_nm) creds.push(t.short_rn_nm);
+            teacherIdSelect.innerHTML += `<option value="${t.id}">${formatName(t)} ${creds.length ? `(${creds.join(', ')})` : ''}</option>`;
         });
 
-        groups.forEach(g => {
-            groupIdSelect.innerHTML += `<option value="${g.id}">${g.group_nm}</option>`;
-        });
-    } catch (err) {
-        console.error('Ошибка загрузки данных:', err);
-    }
+        groupIdSelect.innerHTML = '<option value="">-- Выберите группу --</option>';
+        groups.forEach(g => { groupIdSelect.innerHTML += `<option value="${g.id}">${g.group_nm}</option>`; });
+    } catch (err) { console.error(err); }
 
-    // Переключение интерфейса между ролями
     regRole.addEventListener('change', () => {
-        if (regRole.value == '1') {
-            teacherSelectGroup.style.display = 'none';
-            studentSelectGroup.style.display = 'none';
-        } else if (regRole.value == '2') {
-            teacherSelectGroup.style.display = 'block';
-            studentSelectGroup.style.display = 'none';
-        } else {
-            teacherSelectGroup.style.display = 'none';
-            studentSelectGroup.style.display = 'block';
-        }
+        teacherSelectGroup.style.display = regRole.value == '2' ? 'block' : 'none';
+        studentSelectGroup.style.display = regRole.value == '3' ? 'block' : 'none';
     });
-
     regRole.dispatchEvent(new Event('change'));
 
-    // Загрузка студентов при выборе группы
     groupIdSelect.addEventListener('change', async () => {
         const groupId = groupIdSelect.value;
         if (!groupId) {
             studentIdSelect.innerHTML = '<option value="">-- Сначала выберите группу --</option>';
             return;
         }
-
         try {
             const res = await fetch(`/api/admin/students/${groupId}`);
             const students = await res.json();
-            
             studentIdSelect.innerHTML = '<option value="">-- Выберите студента --</option>';
-            students.forEach(s => {
-                studentIdSelect.innerHTML += `<option value="${s.id}">${formatName(s)}</option>`;
-            });
-        } catch (err) {
-            console.error('Ошибка загрузки студентов:', err);
-        }
+            students.forEach(s => { studentIdSelect.innerHTML += `<option value="${s.id}">${formatName(s)}</option>`; });
+        } catch (err) { console.error(err); }
     });
 
-    // Обработка отправки формы
-    regForm.addEventListener('submit', async (e) => {
+    document.getElementById('adminRegForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+        const msgDiv = document.getElementById('regMessage');
         const roleValue = parseInt(regRole.value);
         let personId = null;
 
         if (roleValue === 2) {
             personId = parseInt(teacherIdSelect.value);
-            if (!personId) {
-                msgDiv.style.color = 'red';
-                msgDiv.textContent = 'Пожалуйста, выберите преподавателя';
-                return;
-            }
+            if (!personId) return msgDiv.textContent = 'Пожалуйста, выберите преподавателя', msgDiv.style.color = 'red';
         } else if (roleValue === 3) {
             personId = parseInt(studentIdSelect.value);
-            if (!personId) {
-                msgDiv.style.color = 'red';
-                msgDiv.textContent = 'Пожалуйста, выберите студента';
-                return;
-            }
-        } else if (roleValue === 1) {
-            personId = null;
+            if (!personId) return msgDiv.textContent = 'Пожалуйста, выберите студента', msgDiv.style.color = 'red';
         }
 
-        // Очищаем логин от лишних пробелов на клиенте
         const login = document.getElementById('regLogin').value.trim();
         const password = document.getElementById('regPassword').value;
-        const passwordConfirm = document.getElementById('regPasswordConfirm').value;
-
-        if (password !== passwordConfirm) {
-            msgDiv.style.color = 'red';
-            msgDiv.textContent = 'Пароли не совпадают!';
-            return;
-        }
+        if (password !== document.getElementById('regPasswordConfirm').value) return msgDiv.textContent = 'Пароли не совпадают!', msgDiv.style.color = 'red';
 
         try {
             const response = await fetch('/api/admin/register', {
@@ -152,157 +106,176 @@ document.addEventListener('DOMContentLoaded', async () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ role: roleValue, personId, login, password })
             });
-
             const data = await response.json();
-
+            msgDiv.style.color = data.success ? 'green' : 'red';
+            msgDiv.textContent = data.message || data.error;
             if (data.success) {
-                msgDiv.style.color = 'green';
-                msgDiv.textContent = data.message;
-                
                 document.getElementById('regLogin').value = '';
                 document.getElementById('regPassword').value = '';
                 document.getElementById('regPasswordConfirm').value = '';
-                
-                loadUsers(); // Обновляем список пользователей
-            } else {
-                msgDiv.style.color = 'red';
-                msgDiv.textContent = data.error || 'Ошибка при регистрации';
+                loadUsers(); 
             }
-        } catch (error) {
-            console.error('Ошибка запроса:', error);
-            msgDiv.style.color = 'red';
-            msgDiv.textContent = 'Сбой сети или сервера';
-        }
+        } catch (error) { msgDiv.textContent = 'Сбой сети', msgDiv.style.color = 'red'; }
     });
-
-    // ====== ЛОГИКА УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ ======
 
     async function loadUsers() {
         try {
             const res = await fetch('/api/admin/users');
             allUsers = await res.json();
             renderUsers();
-        } catch (err) {
-            console.error('Ошибка загрузки пользователей:', err);
-            document.querySelector('#usersTable tbody').innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Ошибка загрузки</td></tr>';
-        }
+        } catch (err) { document.querySelector('#usersTable tbody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:red;">Ошибка загрузки</td></tr>'; }
     }
 
     function renderUsers() {
         const tbody = document.querySelector('#usersTable tbody');
         tbody.innerHTML = '';
-        
         const filterVal = filterRole.value;
         const filteredUsers = filterVal ? allUsers.filter(u => u.role == filterVal) : allUsers;
 
-        if (filteredUsers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Пользователи не найдены</td></tr>';
-            return;
-        }
+        if (filteredUsers.length === 0) return tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Пользователи не найдены</td></tr>';
 
         filteredUsers.forEach(u => {
-            let roleName = '';
-            if (u.role === 1) roleName = 'Администратор';
-            else if (u.role === 2) roleName = 'Преподаватель';
-            else if (u.role === 3) roleName = 'Студент';
-
-            let personName = 'Без привязки';
-            if (u.role === 2 && u.t_last) {
-                personName = `${u.t_last} ${u.t_first} ${u.t_middle || ''}`.trim();
-            } else if (u.role === 3 && u.s_last) {
-                personName = `${u.s_last} ${u.s_first} ${u.s_middle || ''}`.trim();
-            }
-
-            const isCurrentUser = (u.id == localStorage.getItem('userId'));
-            const deleteBtnHtml = isCurrentUser 
-                ? '<span style="color: grey; font-size: 12px;">(Вы)</span>' 
-                : `<button class="btn-primary" style="background-color: #c41230; padding: 5px 15px; font-size: 13px;" onclick="deleteUser(${u.id})">Удалить</button>`;
-
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="font-weight: bold;">${u.login}</td>
-                <td>${roleName}</td>
-                <td>${personName}</td>
-                <td style="text-align: center;">${deleteBtnHtml}</td>
-            `;
-            tbody.appendChild(tr);
+            const roleName = u.role === 1 ? 'Администратор' : (u.role === 2 ? 'Преподаватель' : 'Студент');
+            const personName = u.role === 2 && u.t_last ? `${u.t_last} ${u.t_first} ${u.t_middle || ''}`.trim() : 
+                              (u.role === 3 && u.s_last ? `${u.s_last} ${u.s_first} ${u.s_middle || ''}`.trim() : 'Без привязки');
+            const isCurrentUser = u.id == localStorage.getItem('userId');
+            const deleteBtn = isCurrentUser ? '<span style="color: grey;">(Вы)</span>' : 
+                `<button class="btn-primary" style="background-color: #c41230; padding: 5px 15px;" onclick="deleteUser(${u.id})">Удалить</button>`;
+            
+            tbody.innerHTML += `<tr><td><strong>${u.login}</strong></td><td>${roleName}</td><td>${personName}</td><td style="text-align: center;">${deleteBtn}</td></tr>`;
         });
     }
 
     window.deleteUser = async function(id) {
-        if (!confirm('Внимание! Вы уверены, что хотите удалить этого пользователя?')) {
-            return;
-        }
-
+        if (!confirm('Удалить пользователя?')) return;
         try {
             const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
             const data = await res.json();
-            if (data.success) {
-                loadUsers();
-            } else {
-                alert(data.error || 'Ошибка удаления');
-            }
-        } catch (err) {
-            console.error(err);
-            alert('Сбой сети или сервера');
-        }
+            if (data.success) loadUsers(); else alert(data.error);
+        } catch (err) { alert('Ошибка сервера'); }
     };
 
     filterRole.addEventListener('change', renderUsers);
     loadUsers();
 
-    // ====== ЛОГИКА РЕЗЕРВНОГО КОПИРОВАНИЯ ======
-    const doBackupBtn = document.getElementById('doBackupBtn');
-    if (doBackupBtn) {
-        doBackupBtn.addEventListener('click', async () => {
-            const dateVal = document.getElementById('backupDate').value;
-            const msgDiv = document.getElementById('backupMessage');
+    // --- УПРАВЛЕНИЕ РАСПИСАНИЕМ ---
+    async function loadScheduleFormOptions() {
+        if(document.getElementById('schGroup').options.length > 1) return;
+        try {
+            const [grRes, subRes, tRes] = await Promise.all([fetch('/api/admin/groups'), fetch('/api/teacher/subjects'), fetch('/api/admin/teachers')]);
+            const [groups, subjects, teachers] = await Promise.all([grRes.json(), subRes.json(), tRes.json()]);
 
-            msgDiv.style.color = '#333';
-            msgDiv.textContent = 'Формирование резервной копии... Пожалуйста, подождите.';
-
-            try {
-                // Добавляем параметр даты к запросу, если он выбран
-                let url = '/api/admin/backup';
-                if (dateVal) {
-                    url += `?customDate=${encodeURIComponent(dateVal)}`;
-                }
-
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error('Ошибка при генерации файла на сервере');
-                }
-
-                // Пытаемся получить имя файла из заголовков ответа
-                let filename = 'backup.sql';
-                const disposition = response.headers.get('Content-Disposition');
-                if (disposition && disposition.indexOf('attachment') !== -1) {
-                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
-                    if (matches != null && matches[1]) {
-                        filename = matches[1].replace(/['"]/g, '');
-                    }
-                }
-
-                // Создаем Blob для скачивания файла (вызовет диалог "Сохранить как...")
-                const blob = await response.blob();
-                const downloadUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(downloadUrl);
-
-                msgDiv.style.color = 'green';
-                msgDiv.textContent = 'Резервная копия успешно сформирована и скачана!';
-                
-            } catch (err) {
-                console.error(err);
-                msgDiv.style.color = 'red';
-                msgDiv.textContent = 'Не удалось создать резервную копию.';
-            }
-        });
+            document.getElementById('schGroup').innerHTML = '<option value="">-- Выберите группу --</option>' + groups.map(g => `<option value="${g.id}">${g.group_nm}</option>`).join('');
+            document.getElementById('schSubject').innerHTML = '<option value="">-- Выберите дисциплину --</option>' + subjects.map(s => `<option value="${s.id}">${s.subject_nm}</option>`).join('');
+            document.getElementById('schTeacher').innerHTML = '<option value="">-- Выберите преподавателя --</option>' + teachers.map(t => `<option value="${t.id}">${formatName(t)}</option>`).join('');
+        } catch (err) { console.error(err); }
     }
+
+    async function fetchAdminSchedules() {
+        try {
+            const response = await fetch('/api/admin/schedule-list');
+            const data = await response.json();
+            const tbody = document.querySelector('#adminScheduleListTable tbody');
+            tbody.innerHTML = '';
+            
+            if(data.length === 0) return tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Занятий не найдено</td></tr>';
+
+            data.forEach(row => {
+                const dateStr = new Date(row.lesson_dt).toLocaleDateString('ru-RU');
+                const timeStr = row.lesson_tm.substring(0, 5);
+                const rawDate = row.lesson_dt.split('T')[0];
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${dateStr}</td><td>${timeStr}</td><td>${row.group_nm}</td>
+                        <td>${row.subject_nm}</td><td>${row.last_name} ${row.first_name}</td><td>${row.room}</td>
+                        <td style="display:flex; gap:5px; justify-content:center;">
+                            <button class="btn-primary" style="padding: 5px 10px; font-size:12px;" onclick="editAdminSch(${row.id}, ${row.group_id}, ${row.subject_id}, ${row.teacher_id}, '${rawDate}', '${timeStr}', '${row.room}')">Изменить</button>
+                            <button class="btn-primary" style="background-color: #c41230; padding: 5px 10px; font-size:12px;" onclick="deleteAdminSch(${row.id})">Удалить</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    document.getElementById('adminScheduleForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msgDiv = document.getElementById('schMsg');
+        const id = document.getElementById('schId').value;
+        const payload = {
+            groupId: document.getElementById('schGroup').value,
+            subjectId: document.getElementById('schSubject').value,
+            teacherId: document.getElementById('schTeacher').value,
+            lessonDt: document.getElementById('schDate').value,
+            lessonTm: document.getElementById('schTime').value,
+            room: document.getElementById('schRoom').value
+        };
+
+        try {
+            const url = id ? `/api/admin/schedule/${id}` : '/api/admin/schedule';
+            const method = id ? 'PUT' : 'POST';
+            
+            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            
+            msgDiv.style.color = data.success ? 'green' : 'red';
+            msgDiv.textContent = data.message;
+            if(data.success) {
+                cancelSchEdit();
+                fetchAdminSchedules();
+                setTimeout(() => { msgDiv.textContent = ''; }, 3000);
+            }
+        } catch (err) { msgDiv.textContent = 'Ошибка связи', msgDiv.style.color = 'red'; }
+    });
+
+    window.editAdminSch = (id, gId, sId, tId, d, t, r) => {
+        document.getElementById('schId').value = id;
+        document.getElementById('schGroup').value = gId;
+        document.getElementById('schSubject').value = sId;
+        document.getElementById('schTeacher').value = tId;
+        document.getElementById('schDate').value = d;
+        document.getElementById('schTime').value = t;
+        document.getElementById('schRoom').value = r;
+        document.getElementById('schSubmitBtn').textContent = 'Сохранить';
+        document.getElementById('schCancelBtn').style.display = 'block';
+        document.getElementById('schFormTitle').textContent = 'Редактировать занятие';
+        window.scrollTo(0, 0);
+    };
+
+    const cancelSchEdit = () => {
+        document.getElementById('adminScheduleForm').reset();
+        document.getElementById('schId').value = '';
+        document.getElementById('schSubmitBtn').textContent = 'Добавить';
+        document.getElementById('schCancelBtn').style.display = 'none';
+        document.getElementById('schFormTitle').textContent = 'Добавить учебное занятие';
+    };
+
+    document.getElementById('schCancelBtn').addEventListener('click', cancelSchEdit);
+
+    window.deleteAdminSch = async (id) => {
+        if(!confirm('Удалить это занятие?')) return;
+        try {
+            await fetch(`/api/admin/schedule/${id}`, { method: 'DELETE' });
+            fetchAdminSchedules();
+        } catch(e) { alert('Ошибка сети'); }
+    };
+
+    // --- БЕКАП ---
+    document.getElementById('doBackupBtn').addEventListener('click', async () => {
+        const msgDiv = document.getElementById('backupMessage');
+        msgDiv.textContent = 'Формирование...'; msgDiv.style.color = '#333';
+        try {
+            let url = '/api/admin/backup';
+            if (document.getElementById('backupDate').value) url += `?customDate=${document.getElementById('backupDate').value}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error();
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = window.URL.createObjectURL(blob);
+            a.download = 'backup.sql';
+            a.click();
+            msgDiv.textContent = 'Успешно!'; msgDiv.style.color = 'green';
+        } catch (err) { msgDiv.textContent = 'Ошибка', msgDiv.style.color = 'red'; }
+    });
 });

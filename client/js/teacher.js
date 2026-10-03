@@ -14,49 +14,104 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fetchTeacherSchedule(userId);
     fetchTeacherSession(userId);
-    loadSelectOptions().then(() => {
-        fetchTeacherArchive(userId); 
-    });
+    loadSelectOptions().then(() => fetchTeacherArchive(userId));
 
+    // --- Исправленная логика переключения вкладок ---
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
-
+    
     tabBtns.forEach(btn => {
         btn.addEventListener('click', () => {
+            // Убираем активность со всех кнопок
             tabBtns.forEach(b => b.classList.remove('active'));
+            // Скрываем все вкладки
             tabContents.forEach(c => {
                 c.classList.remove('active');
                 c.classList.add('hidden');
             });
-
+            
+            // Делаем активной нажатую кнопку и соответствующую вкладку
             btn.classList.add('active');
-            const targetId = btn.getAttribute('data-target');
-            const targetContent = document.getElementById(targetId);
+            const targetContent = document.getElementById(btn.getAttribute('data-target'));
             targetContent.classList.remove('hidden');
             targetContent.classList.add('active');
         });
     });
 
-    document.getElementById('btnLoadArchive').addEventListener('click', () => {
-        fetchTeacherArchive(userId);
+    // --- Управление занятиями (Classes) ---
+    const classModal = document.getElementById('classModal');
+    
+    document.getElementById('addClassBtn').addEventListener('click', () => {
+        document.getElementById('addClassForm').reset();
+        document.getElementById('classId').value = '';
+        document.getElementById('classModalTitle').textContent = 'Назначить занятие';
+        document.getElementById('classSubmitBtn').textContent = 'Добавить';
+        classModal.classList.remove('hidden');
     });
 
-    document.getElementById('btnPrintArchive').addEventListener('click', () => {
-        printArchive();
+    document.getElementById('closeClassModal').addEventListener('click', () => classModal.classList.add('hidden'));
+
+    document.getElementById('addClassForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msgDiv = document.getElementById('classMsg');
+        const id = document.getElementById('classId').value;
+        const payload = {
+            groupId: document.getElementById('classGroup').value,
+            subjectId: document.getElementById('classSubject').value,
+            lessonDt: document.getElementById('classDate').value,
+            lessonTm: document.getElementById('classTime').value,
+            room: document.getElementById('classRoom').value,
+            userId: userId
+        };
+
+        try {
+            const url = id ? `/api/teacher/classes/${id}` : '/api/teacher/classes';
+            const method = id ? 'PUT' : 'POST';
+            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            
+            msgDiv.style.color = data.success ? 'green' : 'red';
+            msgDiv.textContent = data.message;
+            if (data.success) {
+                setTimeout(() => { classModal.classList.add('hidden'); msgDiv.textContent = ''; fetchTeacherSchedule(userId); }, 1500);
+            }
+        } catch (err) { msgDiv.style.color = 'red'; msgDiv.textContent = 'Ошибка сервера'; }
     });
 
+    window.editClass = (id, gId, sId, dateRaw, timeRaw, room) => {
+        document.getElementById('classId').value = id;
+        document.getElementById('classGroup').value = gId;
+        document.getElementById('classSubject').value = sId;
+        document.getElementById('classDate').value = dateRaw;
+        document.getElementById('classTime').value = timeRaw;
+        document.getElementById('classRoom').value = room;
+        document.getElementById('classModalTitle').textContent = 'Редактировать занятие';
+        document.getElementById('classSubmitBtn').textContent = 'Сохранить';
+        classModal.classList.remove('hidden');
+    };
+
+    window.deleteClass = async (id) => {
+        if (!confirm('Удалить занятие?')) return;
+        try {
+            const res = await fetch(`/api/teacher/classes/${id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: localStorage.getItem('userId') })
+            });
+            const data = await res.json();
+            if (data.success) fetchTeacherSchedule(localStorage.getItem('userId'));
+            else alert('Ошибка удаления');
+        } catch (e) { alert('Ошибка сети'); }
+    };
+
+    // --- Управление экзаменами ---
     const examModal = document.getElementById('examModal');
-    document.getElementById('addExamBtn').addEventListener('click', () => {
-        examModal.classList.remove('hidden');
-    });
-    document.getElementById('closeExamModal').addEventListener('click', () => {
-        examModal.classList.add('hidden');
-    });
+    document.getElementById('addExamBtn').addEventListener('click', () => examModal.classList.remove('hidden'));
+    document.getElementById('closeExamModal').addEventListener('click', () => examModal.classList.add('hidden'));
 
     document.getElementById('addExamForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const msgDiv = document.getElementById('examMsg');
-        
         const payload = {
             groupId: document.getElementById('examGroup').value,
             subjectId: document.getElementById('examSubject').value,
@@ -67,74 +122,37 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         try {
-            const res = await fetch('/api/teacher/exams', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            const res = await fetch('/api/teacher/exams', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json();
+            msgDiv.style.color = data.success ? 'green' : 'red';
+            msgDiv.textContent = data.message;
             if (data.success) {
-                msgDiv.style.color = 'green';
-                msgDiv.textContent = 'Успешно!';
-                setTimeout(() => { 
-                    examModal.classList.add('hidden'); 
-                    msgDiv.textContent = '';
-                    fetchTeacherSession(userId); 
-                }, 1500);
-            } else {
-                msgDiv.style.color = 'red';
-                msgDiv.textContent = data.message;
+                setTimeout(() => { examModal.classList.add('hidden'); msgDiv.textContent = ''; fetchTeacherSession(userId); }, 1500);
             }
-        } catch (err) {
-            msgDiv.style.color = 'red';
-            msgDiv.textContent = 'Ошибка сервера';
-        }
+        } catch (err) { msgDiv.style.color = 'red'; msgDiv.textContent = 'Ошибка сервера'; }
     });
 
-    // Функция закрытия ведомости и обновления архива
-    const closeGradeModalFunc = () => {
-        document.getElementById('gradeModal').classList.add('hidden');
-        fetchTeacherArchive(userId);
-    };
-
-    // Привязываем и к крестику, и к нижней кнопке
+    // --- Архив и ведомости ---
+    const closeGradeModalFunc = () => { document.getElementById('gradeModal').classList.add('hidden'); fetchTeacherArchive(userId); };
     document.getElementById('closeGradeModal').addEventListener('click', closeGradeModalFunc);
     document.getElementById('closeGradeModalBottomBtn').addEventListener('click', closeGradeModalFunc);
+    document.getElementById('btnLoadArchive').addEventListener('click', () => fetchTeacherArchive(userId));
+    document.getElementById('btnPrintArchive').addEventListener('click', printArchive);
 });
 
 async function loadSelectOptions() {
     try {
-        const [gr, sub] = await Promise.all([
-            fetch('/api/admin/groups'), 
-            fetch('/api/teacher/subjects')
-        ]);
-        const groups = await gr.json();
-        const subjects = await sub.json();
+        const [gr, sub] = await Promise.all([fetch('/api/admin/groups'), fetch('/api/teacher/subjects')]);
+        const [groups, subjects] = await Promise.all([gr.json(), sub.json()]);
         
-        const gSelect = document.getElementById('examGroup');
-        const sSelect = document.getElementById('examSubject');
-        const arcGSelect = document.getElementById('archiveGroup');
-        const arcSSelect = document.getElementById('archiveSubject');
+        const grpHTML = groups.map(g => `<option value="${g.id}">${g.group_nm}</option>`).join('');
+        const subHTML = subjects.map(s => `<option value="${s.id}">${s.subject_nm}</option>`).join('');
         
-        const defaultOption = '<option value="">-- Все --</option>';
-        const defaultOptionReq = '<option value="">-- Выберите --</option>';
+        ['examGroup', 'classGroup'].forEach(id => document.getElementById(id).innerHTML = '<option value="">-- Выберите --</option>' + grpHTML);
+        ['examSubject', 'classSubject'].forEach(id => document.getElementById(id).innerHTML = '<option value="">-- Выберите --</option>' + subHTML);
         
-        gSelect.innerHTML = defaultOptionReq;
-        sSelect.innerHTML = defaultOptionReq;
-        arcGSelect.innerHTML = defaultOption;
-        arcSSelect.innerHTML = defaultOption;
-
-        groups.forEach(g => {
-            const opt = `<option value="${g.id}">${g.group_nm}</option>`;
-            gSelect.innerHTML += opt;
-            arcGSelect.innerHTML += opt;
-        });
-        
-        subjects.forEach(s => {
-            const opt = `<option value="${s.id}">${s.subject_nm}</option>`;
-            sSelect.innerHTML += opt;
-            arcSSelect.innerHTML += opt;
-        });
+        document.getElementById('archiveGroup').innerHTML = '<option value="">-- Все --</option>' + grpHTML;
+        document.getElementById('archiveSubject').innerHTML = '<option value="">-- Все --</option>' + subHTML;
     } catch (err) { console.error(err); }
 }
 
@@ -145,30 +163,24 @@ async function fetchTeacherSchedule(userId) {
         const tbody = document.querySelector('#teacherScheduleTable tbody');
         tbody.innerHTML = ''; 
 
-        if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">У вас нет пар на этой неделе</td></tr>';
-            return;
-        }
+        if (data.length === 0) return tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">У вас нет пар</td></tr>';
 
         data.forEach(row => {
-            const dateObj = new Date(row.Date);
-            const formattedTime = row.Time.substring(0, 5);
+            const dateStr = new Date(row.DateRaw).toLocaleDateString('ru-RU');
+            const timeStr = row.TimeRaw.substring(0, 5);
+            const pureDateRaw = row.DateRaw.split('T')[0];
 
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${dateObj.toLocaleDateString('ru-RU')}</td>
-                <td>${formattedTime}</td>
-                <td>${row.Group}</td>
-                <td>${row.Subject}</td>
-                <td>${row.Room || '-'}</td>
+            tbody.innerHTML += `
+                <tr>
+                    <td>${dateStr}</td><td>${timeStr}</td><td>${row.Group}</td><td>${row.Subject}</td><td>${row.Room || '-'}</td>
+                    <td style="display:flex; justify-content:center; gap:5px;">
+                        <button class="btn-primary" style="padding: 5px 10px; font-size:12px;" onclick="editClass(${row.id}, ${row.group_id}, ${row.subject_id}, '${pureDateRaw}', '${timeStr}', '${row.Room}')">Изменить</button>
+                        <button class="btn-primary" style="background-color: #c41230; padding: 5px 10px; font-size:12px;" onclick="deleteClass(${row.id})">Удалить</button>
+                    </td>
+                </tr>
             `;
-            tbody.appendChild(tr);
         });
-    } catch (error) {
-        console.error(error);
-        document.querySelector('#teacherScheduleTable tbody').innerHTML = 
-            '<tr><td colspan="5" style="text-align:center; color:red;">Ошибка связи с сервером</td></tr>';
-    }
+    } catch (error) { document.querySelector('#teacherScheduleTable tbody').innerHTML = '<tr><td colspan="6" style="text-align:center; color:red;">Ошибка сервера</td></tr>'; }
 }
 
 async function fetchTeacherSession(userId) {
@@ -178,39 +190,24 @@ async function fetchTeacherSession(userId) {
         const tbody = document.querySelector('#teacherSessionTable tbody');
         tbody.innerHTML = ''; 
 
-        if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">У вас нет запланированных экзаменов</td></tr>';
-            return;
-        }
+        if (data.length === 0) return tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">У вас нет запланированных экзаменов</td></tr>';
 
         data.forEach(row => {
-            const dateObj = new Date(row.Date);
-            const formattedTime = row.Time ? row.Time.substring(0, 5) : '-';
-
+            const dateStr = new Date(row.Date).toLocaleDateString('ru-RU');
+            const timeStr = row.Time ? row.Time.substring(0, 5) : '-';
             const tr = document.createElement('tr');
             tr.style.cursor = 'pointer';
             tr.title = 'Нажмите, чтобы выставить оценки';
-            tr.innerHTML = `
-                <td>${dateObj.toLocaleDateString('ru-RU')}</td>
-                <td>${formattedTime}</td>
-                <td>${row.Group}</td>
-                <td>${row.Subject}</td>
-                <td>${row.Room || '-'}</td>
-            `;
+            tr.innerHTML = `<td>${dateStr}</td><td>${timeStr}</td><td>${row.Group}</td><td>${row.Subject}</td><td>${row.Room || '-'}</td>`;
             tr.addEventListener('click', () => openGradeModal(row.id));
             tbody.appendChild(tr);
         });
-    } catch (error) {
-        console.error(error);
-        document.querySelector('#teacherSessionTable tbody').innerHTML = 
-            '<tr><td colspan="5" style="text-align:center; color:red;">Ошибка связи с сервером</td></tr>';
-    }
+    } catch (error) { document.querySelector('#teacherSessionTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center; color:red;">Ошибка сервера</td></tr>'; }
 }
 
 async function fetchTeacherArchive(userId) {
     const groupId = document.getElementById('archiveGroup').value;
     const subjectId = document.getElementById('archiveSubject').value;
-
     const tbody = document.querySelector('#archiveTable tbody');
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr>';
 
@@ -222,31 +219,17 @@ async function fetchTeacherArchive(userId) {
         const res = await fetch(url);
         const data = await res.json();
         
-        tbody.innerHTML = '';
-        
-        if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Оценки не найдены</td></tr>';
-            return;
-        }
+        if (data.length === 0) return tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Оценки не найдены</td></tr>';
 
-        data.forEach(row => {
-            const name = `${row.last_name} ${row.first_name} ${row.middle_name || ''}`;
-            const dateObj = new Date(row.exam_dt).toLocaleDateString('ru-RU');
-            
-            tbody.innerHTML += `
-                <tr>
-                    <td>${dateObj}</td>
-                    <td>${row.group_nm}</td>
-                    <td>${row.subject_nm}</td>
-                    <td>${name.trim()}</td>
-                    <td style="font-weight:bold; color: #34495e;">${row.grade}</td>
-                </tr>
-            `;
-        });
-    } catch (err) {
-        console.error(err);
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:red;">Ошибка связи с сервером</td></tr>';
-    }
+        tbody.innerHTML = data.map(row => `
+            <tr>
+                <td>${new Date(row.exam_dt).toLocaleDateString('ru-RU')}</td>
+                <td>${row.group_nm}</td><td>${row.subject_nm}</td>
+                <td>${`${row.last_name} ${row.first_name}${row.middle_name || ''}`.trim()}</td>
+                <td style="font-weight:bold; color: #34495e;">${row.grade}</td>
+            </tr>
+        `).join('');
+    } catch (err) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:red;">Ошибка сервера</td></tr>'; }
 }
 
 function printArchive() {
@@ -259,29 +242,27 @@ function printArchive() {
     if (subjectName !== '-- Все --') titleText += ` (Предмет: ${subjectName})`;
 
     const printWindow = window.open('', '', 'height=600,width=800');
-    printWindow.document.write('<html><head><title>Печать ведомости</title>');
-    printWindow.document.write('<style>');
-    printWindow.document.write('body { font-family: Arial, sans-serif; padding: 20px; }');
-    printWindow.document.write('table { width: 100%; border-collapse: collapse; margin-top: 20px; }');
-    printWindow.document.write('th, td { border: 1px solid #000; padding: 8px; text-align: left; }');
-    printWindow.document.write('th { background-color: #f2f2f2; }');
-    printWindow.document.write('h2 { text-align: center; }');
-    printWindow.document.write('</style>');
-    printWindow.document.write('</head><body>');
-    printWindow.document.write(`<h2>${titleText}</h2>`);
-    printWindow.document.write(printContent);
-    printWindow.document.write('<div style="margin-top: 50px; display: flex; justify-content: space-between;">');
-    printWindow.document.write('<span>Подпись преподавателя: _____________________</span>');
-    printWindow.document.write(`<span>Дата печати: ${new Date().toLocaleDateString('ru-RU')}</span>`);
-    printWindow.document.write('</div>');
-    printWindow.document.write('</body></html>');
-    
+    printWindow.document.write(`
+        <html><head><title>Печать ведомости</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            h2 { text-align: center; }
+        </style>
+        </head><body>
+        <h2>${titleText}</h2>
+        ${printContent}
+        <div style="margin-top: 50px; display: flex; justify-content: space-between;">
+            <span>Подпись преподавателя: _____________________</span>
+            <span>Дата печати: ${new Date().toLocaleDateString('ru-RU')}</span>
+        </div>
+        </body></html>
+    `);
     printWindow.document.close();
     printWindow.focus();
-    setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-    }, 250);
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
 }
 
 async function openGradeModal(scheduleId) {
@@ -293,71 +274,35 @@ async function openGradeModal(scheduleId) {
     try {
         const res = await fetch(`/api/teacher/exam-students/${scheduleId}`);
         const students = await res.json();
-        tbody.innerHTML = '';
+        
+        if(students.length === 0) return tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">В группе нет студентов</td></tr>';
 
-        if(students.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">В группе нет студентов</td></tr>';
-            return;
-        }
-
-        students.forEach(s => {
-            const name = `${s.last_name} ${s.first_name} ${s.middle_name || ''}`;
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${name}</td>
-                <td>
-                    <input type="number" min="2" max="5" value="${s.grade}" id="gr_${s.id}" style="width: 80px; padding: 5px;">
-                </td>
+        tbody.innerHTML = students.map(s => `
+            <tr>
+                <td>${`${s.last_name} ${s.first_name}${s.middle_name || ''}`.trim()}</td>
+                <td><input type="number" min="2" max="5" value="${s.grade}" id="gr_${s.id}" style="width: 80px; padding: 5px;"></td>
                 <td style="display: flex; gap: 5px;">
                     <button class="btn-primary" style="padding: 5px 15px; font-size: 14px;" onclick="saveGrade(${scheduleId}, ${s.id})">Сохранить</button>
                     <button class="btn-primary" style="padding: 5px 15px; font-size: 14px; background-color: #c41230;" onclick="clearGrade(${scheduleId}, ${s.id})">Очистить</button>
                 </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    } catch (err) { 
-        console.error(err); 
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:red;">Ошибка загрузки списка студентов</td></tr>';
-    }
+            </tr>
+        `).join('');
+    } catch (err) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:red;">Ошибка</td></tr>'; }
 }
 
 async function saveGrade(scheduleId, studentId) {
     const grade = document.getElementById(`gr_${studentId}`).value;
-    if (!grade || grade < 2 || grade > 5) { 
-        alert('Оценка должна быть числом от 2 до 5'); 
-        return; 
-    }
+    if (!grade || grade < 2 || grade > 5) return alert('Оценка должна быть числом от 2 до 5'); 
 
     try {
-        const res = await fetch('/api/teacher/grades', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ scheduleId, studentId, grade })
-        });
-        const data = await res.json();
-        if(data.success) {
-            alert('Оценка успешно сохранена');
-        }
-    } catch (err) { 
-        console.error(err); 
-        alert('Ошибка при сохранении оценки');
-    }
+        const res = await fetch('/api/teacher/grades', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ scheduleId, studentId, grade }) });
+        if((await res.json()).success) alert('Оценка успешно сохранена');
+    } catch (err) { alert('Ошибка при сохранении оценки'); }
 }
 
 async function clearGrade(scheduleId, studentId) {
     try {
-        const res = await fetch('/api/teacher/grades', {
-            method: 'DELETE',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ scheduleId, studentId })
-        });
-        const data = await res.json();
-        if(data.success) {
-            document.getElementById(`gr_${studentId}`).value = '';
-            alert('Оценка очищена');
-        }
-    } catch (err) { 
-        console.error(err); 
-        alert('Ошибка при удалении оценки');
-    }
+        const res = await fetch('/api/teacher/grades', { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ scheduleId, studentId }) });
+        if((await res.json()).success) { document.getElementById(`gr_${studentId}`).value = ''; alert('Оценка очищена'); }
+    } catch (err) { alert('Ошибка при удалении оценки'); }
 }
