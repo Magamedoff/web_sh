@@ -27,14 +27,30 @@ app.use(express.static(path.join(__dirname, '../client')));
 // --- ЭНДПОИНТЫ РАСПИСАНИЯ (Общие) ---
 
 app.get('/api/schedule', async (req, res) => {
+    const { userId, role } = req.query;
     try {
-        const query = `
+        let query = `
             SELECT * FROM groupweeklyschedule
             WHERE "Date" >= CURRENT_DATE 
               AND "Date" < CURRENT_DATE + INTERVAL '7 days'
-            ORDER BY "Date", "Time", "Group"
         `;
-        const result = await pool.query(query);
+        const params = [];
+        
+        if (role == '3' && userId) {
+            query = `
+                SELECT v.* FROM groupweeklyschedule v
+                JOIN groups g ON v."Group" = g.group_nm
+                JOIN students s ON s.group_id = g.id
+                JOIN users u ON u.student_id = s.id
+                WHERE u.id = $1 
+                  AND v."Date" >= CURRENT_DATE 
+                  AND v."Date" < CURRENT_DATE + INTERVAL '7 days'
+            `;
+            params.push(userId);
+        }
+        
+        query += ` ORDER BY "Date", "Time", "Group"`;
+        const result = await pool.query(query, params);
         res.json(result.rows);
     } catch (err) {
         console.error('Ошибка БД:', err);
@@ -43,13 +59,28 @@ app.get('/api/schedule', async (req, res) => {
 });
 
 app.get('/api/session', async (req, res) => {
+    const { userId, role } = req.query;
     try {
-        const query = `
+        let query = `
             SELECT * FROM groupsessionschedule
             WHERE "Date" >= CURRENT_DATE 
-            ORDER BY "Date", "Time"
         `;
-        const result = await pool.query(query);
+        const params = [];
+        
+        if (role == '3' && userId) {
+            query = `
+                SELECT v.* FROM groupsessionschedule v
+                JOIN groups g ON v."Group" = g.group_nm
+                JOIN students s ON s.group_id = g.id
+                JOIN users u ON u.student_id = s.id
+                WHERE u.id = $1 
+                  AND v."Date" >= CURRENT_DATE
+            `;
+            params.push(userId);
+        }
+        
+        query += ` ORDER BY "Date", "Time"`;
+        const result = await pool.query(query, params);
         res.json(result.rows);
     } catch (err) {
         console.error('Ошибка БД:', err);
@@ -61,7 +92,6 @@ app.get('/api/session', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
     const { password } = req.body;
-    // Очищаем логин от случайных пробелов
     const login = req.body.login.trim(); 
     const passHash = crypto.createHash('sha512').update(password).digest('hex');
 
@@ -79,23 +109,19 @@ app.post('/api/login', async (req, res) => {
             res.status(401).json({ success: false, message: 'Неверный логин или пароль' });
         }
     } catch (err) {
-        console.error('Ошибка БД при авторизации:', err);
         res.status(500).json({ error: 'Внутренняя ошибка сервера' });
     }
 });
 
 app.post('/api/admin/register', async (req, res) => {
     const { password, role, personId } = req.body;
-    // Очищаем логин от случайных пробелов перед записью в БД
     const login = req.body.login.trim(); 
     const passHash = crypto.createHash('sha512').update(password).digest('hex');
     
     try {
         const maxIdResult = await pool.query('SELECT COALESCE(MAX(id), 0) as max_id FROM users');
         const nextId = parseInt(maxIdResult.rows[0].max_id) + 1;
-
-        let studentId = null;
-        let teacherId = null;
+        let studentId = null, teacherId = null;
 
         if (role === 2) teacherId = personId;
         if (role === 3) studentId = personId;
@@ -107,13 +133,11 @@ app.post('/api/admin/register', async (req, res) => {
         await pool.query(query, [nextId, login, passHash, role, studentId, teacherId]);
         res.json({ success: true, message: 'Учетная запись успешно создана' });
     } catch (err) {
-        console.error('Ошибка создания пользователя:', err);
         if (err.code === '23505') res.status(400).json({ error: 'Пользователь уже существует' });
         else res.status(500).json({ error: 'Ошибка при создании' });
     }
 });
 
-// Получение списка всех пользователей
 app.get('/api/admin/users', async (req, res) => {
     try {
         const query = `
@@ -127,22 +151,14 @@ app.get('/api/admin/users', async (req, res) => {
         `;
         const result = await pool.query(query);
         res.json(result.rows);
-    } catch (err) {
-        console.error('Ошибка загрузки пользователей:', err);
-        res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Внутренняя ошибка сервера' }); }
 });
 
-// Удаление пользователя
 app.delete('/api/admin/users/:id', async (req, res) => {
-    const { id } = req.params;
     try {
-        await pool.query('DELETE FROM users WHERE id = $1', [id]);
+        await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
         res.json({ success: true });
-    } catch (err) {
-        console.error('Ошибка удаления пользователя:', err);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
 });
 
 app.get('/api/admin/teachers', async (req, res) => {
@@ -180,21 +196,148 @@ app.get('/api/teacher/subjects', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
 });
 
-// --- ЛОГИКА ПРЕПОДАВАТЕЛЯ ---
+// --- УПРАВЛЕНИЕ РАСПИСАНИЕМ (АДМИНИСТРАТОР) ---
+
+app.get('/api/admin/schedule-list', async (req, res) => {
+    try {
+        const query = `
+            SELECT s.id, s.lesson_dt, s.lesson_tm, s.room,
+                   g.id as group_id, g.group_nm,
+                   sub.id as subject_id, sub.subject_nm,
+                   t.id as teacher_id, t.last_name, t.first_name, t.middle_name
+            FROM schedules s
+            JOIN groups g ON s.group_id = g.id
+            JOIN subjects sub ON s.subject_id = sub.id
+            JOIN teachers t ON s.teacher_id = t.id
+            ORDER BY s.lesson_dt DESC, s.lesson_tm ASC
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: 'Ошибка БД' }); }
+});
+
+app.post('/api/admin/schedule', async (req, res) => {
+    const { groupId, subjectId, teacherId, lessonDt, lessonTm, room } = req.body;
+    try {
+        const checkResult = await pool.query(`
+            SELECT id FROM schedules
+            WHERE lesson_dt = $1 AND lesson_tm = $2 
+              AND (teacher_id = $3 OR group_id = $4 OR room = $5)
+        `, [lessonDt, lessonTm, teacherId, groupId, room]);
+
+        if (checkResult.rows.length > 0) return res.status(400).json({ success: false, message: 'Наложение: группа, преподаватель или аудитория уже заняты.' });
+
+        const maxIdResult = await pool.query('SELECT COALESCE(MAX(id), 0) as max_id FROM schedules');
+        const nextId = parseInt(maxIdResult.rows[0].max_id) + 1;
+
+        await pool.query(`
+            INSERT INTO schedules (id, group_id, subject_id, lesson_dt, lesson_tm, teacher_id, room)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [nextId, groupId, subjectId, lessonDt, lessonTm, teacherId, room]);
+        res.json({ success: true, message: 'Учебное занятие успешно добавлено.' });
+    } catch (err) { res.status(500).json({ error: 'Ошибка при добавлении занятия' }); }
+});
+
+app.put('/api/admin/schedule/:id', async (req, res) => {
+    const { id } = req.params;
+    const { groupId, subjectId, teacherId, lessonDt, lessonTm, room } = req.body;
+    try {
+        const checkResult = await pool.query(`
+            SELECT id FROM schedules
+            WHERE lesson_dt = $1 AND lesson_tm = $2 
+              AND (teacher_id = $3 OR group_id = $4 OR room = $5) AND id != $6
+        `, [lessonDt, lessonTm, teacherId, groupId, room, id]);
+
+        if (checkResult.rows.length > 0) return res.status(400).json({ success: false, message: 'Наложение расписания.' });
+
+        await pool.query(`
+            UPDATE schedules SET group_id=$1, subject_id=$2, teacher_id=$3, lesson_dt=$4, lesson_tm=$5, room=$6 WHERE id=$7
+        `, [groupId, subjectId, teacherId, lessonDt, lessonTm, room, id]);
+        res.json({ success: true, message: 'Занятие обновлено.' });
+    } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
+});
+
+app.delete('/api/admin/schedule/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM schedules WHERE id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
+});
+
+// --- ЛОГИКА ПРЕПОДАВАТЕЛЯ (ЗАНЯТИЯ И ЭКЗАМЕНЫ) ---
 
 app.get('/api/teacher/schedule/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const query = `
-            SELECT g.group_nm AS "Group", s.lesson_dt AS "Date", s.lesson_tm AS "Time",
+            SELECT s.id, g.id AS group_id, sub.id AS subject_id,
+                   g.group_nm AS "Group", s.lesson_dt AS "DateRaw", s.lesson_tm AS "TimeRaw",
                    sub.subject_nm AS "Subject", s.room AS "Room"
-            FROM schedules s, groups g, subjects sub, users u
-            WHERE s.group_id = g.id AND s.subject_id = sub.id AND s.teacher_id = u.teacher_id
-              AND u.id = $1 AND s.lesson_dt >= CURRENT_DATE AND s.lesson_dt < CURRENT_DATE + INTERVAL '7 days'
+            FROM schedules s
+            JOIN groups g ON s.group_id = g.id
+            JOIN subjects sub ON s.subject_id = sub.id
+            JOIN users u ON s.teacher_id = u.teacher_id
+            WHERE u.id = $1 AND s.lesson_dt >= CURRENT_DATE 
             ORDER BY s.lesson_dt, s.lesson_tm
         `;
         const result = await pool.query(query, [userId]);
         res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
+});
+
+app.post('/api/teacher/classes', async (req, res) => {
+    const { groupId, subjectId, lessonDt, lessonTm, room, userId } = req.body;
+    try {
+        const teacherRes = await pool.query(`SELECT teacher_id FROM users WHERE id = $1`, [userId]);
+        const teacherId = teacherRes.rows[0].teacher_id;
+
+        const checkRes = await pool.query(`
+            SELECT id FROM schedules
+            WHERE lesson_dt = $1 AND lesson_tm = $2 AND (teacher_id = $3 OR group_id = $4 OR room = $5)
+        `, [lessonDt, lessonTm, teacherId, groupId, room]);
+
+        if (checkRes.rows.length > 0) return res.status(400).json({ success: false, message: 'Наложение расписания.' });
+
+        const maxIdResult = await pool.query('SELECT COALESCE(MAX(id), 0) as max_id FROM schedules');
+        const nextId = parseInt(maxIdResult.rows[0].max_id) + 1;
+
+        await pool.query(`
+            INSERT INTO schedules (id, group_id, subject_id, lesson_dt, lesson_tm, teacher_id, room)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [nextId, groupId, subjectId, lessonDt, lessonTm, teacherId, room]);
+        res.json({ success: true, message: 'Занятие добавлено.' });
+    } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
+});
+
+app.put('/api/teacher/classes/:id', async (req, res) => {
+    const { id } = req.params;
+    const { groupId, subjectId, lessonDt, lessonTm, room, userId } = req.body;
+    try {
+        const teacherRes = await pool.query(`SELECT teacher_id FROM users WHERE id = $1`, [userId]);
+        const teacherId = teacherRes.rows[0].teacher_id;
+
+        const checkRes = await pool.query(`
+            SELECT id FROM schedules
+            WHERE lesson_dt = $1 AND lesson_tm = $2 AND (teacher_id = $3 OR group_id = $4 OR room = $5) AND id != $6
+        `, [lessonDt, lessonTm, teacherId, groupId, room, id]);
+
+        if (checkRes.rows.length > 0) return res.status(400).json({ success: false, message: 'Наложение расписания.' });
+
+        await pool.query(`
+            UPDATE schedules SET group_id=$1, subject_id=$2, lesson_dt=$3, lesson_tm=$4, room=$5 WHERE id=$6 AND teacher_id=$7
+        `, [groupId, subjectId, lessonDt, lessonTm, room, id, teacherId]);
+        res.json({ success: true, message: 'Занятие обновлено.' });
+    } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
+});
+
+app.delete('/api/teacher/classes/:id', async (req, res) => {
+    const { id } = req.params;
+    const { userId } = req.body;
+    try {
+        const teacherRes = await pool.query(`SELECT teacher_id FROM users WHERE id = $1`, [userId]);
+        const teacherId = teacherRes.rows[0].teacher_id;
+        await pool.query('DELETE FROM schedules WHERE id = $1 AND teacher_id = $2', [id, teacherId]);
+        res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
 });
 
@@ -218,90 +361,58 @@ app.post('/api/teacher/exams', async (req, res) => {
         const teacherRes = await pool.query(`SELECT teacher_id FROM users WHERE id = $1`, [userId]);
         const teacherId = teacherRes.rows[0].teacher_id;
 
-        const checkQuery = `
+        const checkResult = await pool.query(`
             SELECT id FROM examschedules
-            WHERE exam_dt = $1 AND exam_tm = $2 
-              AND (teacher_id = $3 OR group_id = $4 OR room = $5)
-        `;
-        const checkResult = await pool.query(checkQuery, [examDt, examTm, teacherId, groupId, room]);
+            WHERE exam_dt = $1 AND exam_tm = $2 AND (teacher_id = $3 OR group_id = $4 OR room = $5)
+        `, [examDt, examTm, teacherId, groupId, room]);
 
-        if (checkResult.rows.length > 0) {
-            return res.status(400).json({ success: false, message: 'Наложение: группа, преподаватель или аудитория уже заняты.' });
-        }
+        if (checkResult.rows.length > 0) return res.status(400).json({ success: false, message: 'Наложение: группа, преподаватель или аудитория уже заняты.' });
 
         const maxIdResult = await pool.query('SELECT COALESCE(MAX(id), 0) as max_id FROM examschedules');
         const nextId = parseInt(maxIdResult.rows[0].max_id) + 1;
 
-        const insertQuery = `
+        await pool.query(`
             INSERT INTO examschedules (id, group_id, subject_id, exam_dt, exam_tm, teacher_id, room)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `;
-        await pool.query(insertQuery, [nextId, groupId, subjectId, examDt, examTm, teacherId, room]);
+        `, [nextId, groupId, subjectId, examDt, examTm, teacherId, room]);
         res.json({ success: true, message: 'Экзамен добавлен в расписание.' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Ошибка при добавлении экзамена' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Ошибка при добавлении экзамена' }); }
 });
 
 app.get('/api/teacher/exam-students/:scheduleId', async (req, res) => {
-    const { scheduleId } = req.params;
     try {
-        const studentsQuery = `
+        const studentsResult = await pool.query(`
             SELECT s.id, s.last_name, s.first_name, s.middle_name
             FROM students s, examschedules es
             WHERE s.group_id = es.group_id AND es.id = $1
             ORDER BY s.last_name
-        `;
-        const studentsResult = await pool.query(studentsQuery, [scheduleId]);
+        `, [req.params.scheduleId]);
 
-        const gradesQuery = `
-            SELECT student_id, grade FROM examresults WHERE schedule_id = $1
-        `;
-        const gradesResult = await pool.query(gradesQuery, [scheduleId]);
-
+        const gradesResult = await pool.query(`SELECT student_id, grade FROM examresults WHERE schedule_id = $1`, [req.params.scheduleId]);
         const gradesMap = {};
         gradesResult.rows.forEach(r => { gradesMap[r.student_id] = r.grade; });
 
-        const finalData = studentsResult.rows.map(s => ({
-            ...s,
-            grade: gradesMap[s.id] || ''
-        }));
-
-        res.json(finalData);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
+        res.json(studentsResult.rows.map(s => ({ ...s, grade: gradesMap[s.id] || '' })));
+    } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
 });
 
 app.post('/api/teacher/grades', async (req, res) => {
     const { scheduleId, studentId, grade } = req.body;
     try {
-        const query = `
-            INSERT INTO examresults (schedule_id, student_id, grade)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (schedule_id, student_id) 
-            DO UPDATE SET grade = EXCLUDED.grade
-        `;
-        await pool.query(query, [scheduleId, studentId, grade]);
+        await pool.query(`
+            INSERT INTO examresults (schedule_id, student_id, grade) VALUES ($1, $2, $3)
+            ON CONFLICT (schedule_id, student_id) DO UPDATE SET grade = EXCLUDED.grade
+        `, [scheduleId, studentId, grade]);
         res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Ошибка сохранения' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Ошибка сохранения' }); }
 });
 
 app.delete('/api/teacher/grades', async (req, res) => {
     const { scheduleId, studentId } = req.body;
     try {
-        const query = `DELETE FROM examresults WHERE schedule_id = $1 AND student_id = $2`;
-        await pool.query(query, [scheduleId, studentId]);
+        await pool.query(`DELETE FROM examresults WHERE schedule_id = $1 AND student_id = $2`, [scheduleId, studentId]);
         res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Ошибка удаления' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Ошибка удаления' }); }
 });
 
 app.get('/api/teacher/archive/:userId', async (req, res) => {
@@ -310,104 +421,51 @@ app.get('/api/teacher/archive/:userId', async (req, res) => {
 
     try {
         let query = `
-            SELECT s.last_name, s.first_name, s.middle_name, er.grade, es.exam_dt,
-                   g.group_nm, sub.subject_nm
+            SELECT s.last_name, s.first_name, s.middle_name, er.grade, es.exam_dt, g.group_nm, sub.subject_nm
             FROM examresults er, examschedules es, students s, users u, groups g, subjects sub
-            WHERE er.schedule_id = es.id 
-              AND er.student_id = s.id 
-              AND es.teacher_id = u.teacher_id 
-              AND es.group_id = g.id
-              AND es.subject_id = sub.id
-              AND u.id = $1 
+            WHERE er.schedule_id = es.id AND er.student_id = s.id AND es.teacher_id = u.teacher_id 
+              AND es.group_id = g.id AND es.subject_id = sub.id AND u.id = $1 
         `;
-
         const params = [userId];
         let paramIndex = 2;
 
-        if (groupId) {
-            query += ` AND es.group_id = $${paramIndex}`;
-            params.push(groupId);
-            paramIndex++;
-        }
-
-        if (subjectId) {
-            query += ` AND es.subject_id = $${paramIndex}`;
-            params.push(subjectId);
-            paramIndex++;
-        }
-
+        if (groupId) { query += ` AND es.group_id = $${paramIndex}`; params.push(groupId); paramIndex++; }
+        if (subjectId) { query += ` AND es.subject_id = $${paramIndex}`; params.push(subjectId); paramIndex++; }
+        
         query += ` ORDER BY es.exam_dt DESC, g.group_nm ASC, sub.subject_nm ASC, s.last_name ASC`;
-
         const result = await pool.query(query, params);
         res.json(result.rows);
-    } catch (err) {
-        console.error('Ошибка загрузки архива ведомостей:', err);
-        res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Внутренняя ошибка сервера' }); }
 });
 
 // --- ЛОГИКА СТУДЕНТА ---
-
 app.get('/api/student/grades/:userId', async (req, res) => {
-    const { userId } = req.params;
     try {
-        const query = `
+        const result = await pool.query(`
             SELECT "Subject", "Grade", "Date", "Teacher"
-            FROM studentexamgrades
-            WHERE "UserID" = $1
-            ORDER BY "Date" DESC
-        `;
-        const result = await pool.query(query, [userId]);
+            FROM studentexamgrades WHERE "UserID" = $1 ORDER BY "Date" DESC
+        `, [req.params.userId]);
         res.json(result.rows);
-    } catch (err) {
-        console.error('Ошибка БД (успеваемость):', err);
-        res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Внутренняя ошибка сервера' }); }
 });
 
 // --- РЕЗЕРВНОЕ КОПИРОВАНИЕ ---
 app.get('/api/admin/backup', (req, res) => {
-    // Получаем метку даты, выбранную пользователем 
     const customDate = req.query.customDate;
-    
-    // Системное время для уникальности
     const timeStr = new Date().toISOString().replace(/[:.]/g, '-');
-    
-    // Формируем финальное имя файла
-    let fileNameStr = timeStr;
-    if (customDate) {
-        fileNameStr = `${customDate}_${timeStr}`;
-    }
-    
+    const fileNameStr = customDate ? `${customDate}_${timeStr}` : timeStr;
     const fileName = `SH_BD_backup_${fileNameStr}.sql`;
     const filePath = path.join(__dirname, fileName);
 
-    // Получаем команду из файла .env (или используем дефолтную pg_dump)
     const pgDumpCommand = process.env.PG_DUMP_CMD || 'pg_dump';
-
-    // Оборачиваем путь к pg_dump в кавычки для корректной работы в Windows
     const command = `"${pgDumpCommand}" -U ${process.env.DB_USER} -h ${process.env.DB_HOST} -p ${process.env.DB_PORT} -F p -f "${filePath}" ${process.env.DB_NAME}`;
 
-    // Передаем пароль через переменную окружения PGPASSWORD для безопасности
     exec(command, { env: { ...process.env, PGPASSWORD: process.env.DB_PASSWORD } }, (error) => {
-        if (error) {
-            console.error(`Ошибка при создании резервной копии: ${error.message}`);
-            return res.status(500).json({ error: 'Ошибка при создании резервной копии на сервере' });
-        }
-        
-        // Отправляем файл клиенту, браузер сам спросит путь для сохранения
-        res.download(filePath, fileName, (err) => {
-            if (err) {
-                console.error('Ошибка при отправке файла:', err);
-            }
-            // Удаляем временный файл sql с сервера после скачивания
-            fs.unlink(filePath, (unlinkErr) => {
-                if (unlinkErr) console.error('Ошибка при удалении временного файла:', unlinkErr);
-            });
+        if (error) return res.status(500).json({ error: 'Ошибка при создании резервной копии' });
+        res.download(filePath, fileName, () => {
+            fs.unlink(filePath, (err) => { if (err) console.error('Ошибка удаления', err); });
         });
     });
 });
 
-app.listen(port, () => {
-    console.log(`Сервер работает. Откройте в браузере: http://localhost:${port}`);
-});
+app.listen(port, () => { console.log(`Сервер работает: http://localhost:${port}`); });
